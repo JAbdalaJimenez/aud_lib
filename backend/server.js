@@ -16,20 +16,16 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Middleware
-const allowedOrigins = [
-  'http://localhost:3000',
-  process.env.FRONTEND_URL || 'https://tu-dominio.vercel.app'
-];
-
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    // Permite requests sin origin (como Postman), localhost y cualquier subdominio de aud-lib en Vercel
+    if (!origin || /^https:\/\/aud-lib.*\.vercel\.app$/.test(origin) || origin === 'http://localhost:3000') {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error('No permitido por CORS'));
     }
   },
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
   credentials: true
 }));
 app.use(express.json());
