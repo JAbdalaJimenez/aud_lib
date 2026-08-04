@@ -13,7 +13,7 @@
  * - Resume from last position
  */
 
-const API_BASE = '/api/books';
+const API_BASE = API_URL;
 
 // SVG Icons
 const ICONS = {
@@ -471,28 +471,63 @@ function loadVoices() {
   const voices = synth.getVoices();
   voiceSelect.innerHTML = '';
 
-  // Prefer Spanish voices, then show all
-  const spanishVoices = voices.filter(v => v.lang.startsWith('es'));
-  const otherVoices = voices.filter(v => !v.lang.startsWith('es'));
-  const sortedVoices = [...spanishVoices, ...otherVoices];
-
-  if (sortedVoices.length === 0) {
+  if (voices.length === 0) {
     voiceSelect.innerHTML = '<option value="">Sin voces</option>';
     return;
   }
 
-  sortedVoices.forEach((voice, i) => {
+  // Helper to check if voice is high quality (Neural/Natural)
+  const isPremium = (voice) => {
+    const name = voice.name.toLowerCase();
+    return name.includes('natural') || name.includes('neural') || name.includes('premium');
+  };
+
+  // Categorize voices
+  const argentineVoices = voices.filter(v => v.lang === 'es-AR' || v.lang === 'es_AR');
+  const otherSpanishVoices = voices.filter(v => v.lang.startsWith('es') && v.lang !== 'es-AR' && v.lang !== 'es_AR');
+  const otherVoices = voices.filter(v => !v.lang.startsWith('es'));
+
+  // Sort within categories (Premium first)
+  const sortPremiumFirst = (a, b) => {
+    const aPrem = isPremium(a);
+    const bPrem = isPremium(b);
+    if (aPrem && !bPrem) return -1;
+    if (!aPrem && bPrem) return 1;
+    return a.name.localeCompare(b.name);
+  };
+
+  argentineVoices.sort(sortPremiumFirst);
+  otherSpanishVoices.sort(sortPremiumFirst);
+
+  const sortedVoices = [...argentineVoices, ...otherSpanishVoices, ...otherVoices];
+
+  sortedVoices.forEach((voice) => {
     const option = document.createElement('option');
-    option.value = i;
-    const langTag = voice.lang.startsWith('es') ? '[ES]' : '[' + voice.lang.substring(0, 2).toUpperCase() + ']';
-    option.textContent = `${langTag} ${voice.name}`;
+    option.value = voices.indexOf(voice);
+    
+    // Create label
+    let langTag = '';
+    if (voice.lang.startsWith('es')) {
+      const region = voice.lang.split(/[-_]/)[1];
+      langTag = region ? `[${region.toUpperCase()}]` : '[ES]';
+    } else {
+      langTag = `[${voice.lang.substring(0, 2).toUpperCase()}]`;
+    }
+
+    const premiumTag = isPremium(voice) ? ' ✨' : '';
+    
+    option.textContent = `${langTag} ${voice.name}${premiumTag}`;
     option.dataset.voiceIndex = voices.indexOf(voice);
     voiceSelect.appendChild(option);
   });
 
-  // Auto-select first Spanish voice
-  if (spanishVoices.length > 0) {
-    selectedVoice = spanishVoices[0];
+  // Auto-select first Argentine voice (preferably premium), or first Spanish voice
+  if (argentineVoices.length > 0) {
+    selectedVoice = argentineVoices[0];
+  } else if (otherSpanishVoices.length > 0) {
+    selectedVoice = otherSpanishVoices[0];
+  } else {
+    selectedVoice = sortedVoices[0];
   }
 }
 
@@ -589,3 +624,19 @@ function setupControls() {
 // =====================
 
 init();
+
+// =====================
+// PWA Service Worker Registration
+// =====================
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .then(registration => {
+        console.log('[PWA] Service Worker registrado exitosamente con el alcance:', registration.scope);
+      })
+      .catch(error => {
+        console.error('[PWA] Error registrando el Service Worker:', error);
+      });
+  });
+}

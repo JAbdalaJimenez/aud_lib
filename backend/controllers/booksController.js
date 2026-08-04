@@ -2,6 +2,13 @@ const Book = require('../models/Book');
 const { extractText, detectFileType } = require('../utils/textExtractor');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 /**
  * POST /api/books
@@ -50,7 +57,21 @@ exports.uploadBook = async (req, res) => {
     // Construir URL de portada
     let coverUrl = '';
     if (coverFile) {
-      coverUrl = `/uploads/${coverFile.filename}`;
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        try {
+          const result = await cloudinary.uploader.upload(coverFile.path, {
+            folder: 'audiolib_covers'
+          });
+          coverUrl = result.secure_url;
+          fs.unlinkSync(coverFile.path); // Borrar local una vez subido
+        } catch (cloudErr) {
+          console.error('Error subiendo portada a Cloudinary:', cloudErr);
+          // Fallback a local si falla
+          coverUrl = `/uploads/${coverFile.filename}`;
+        }
+      } else {
+        coverUrl = `/uploads/${coverFile.filename}`;
+      }
     }
 
     // Crear el libro en la base de datos
@@ -164,11 +185,21 @@ exports.deleteBook = async (req, res) => {
       return res.status(404).json({ error: 'Libro no encontrado' });
     }
 
-    // Eliminar la portada si existe
-    if (book.coverUrl) {
+    // Eliminar la portada si existe y es local
+    if (book.coverUrl && book.coverUrl.startsWith('/uploads/')) {
       const coverPath = path.join(__dirname, '..', book.coverUrl);
       if (fs.existsSync(coverPath)) {
         fs.unlinkSync(coverPath);
+      }
+    } else if (book.coverUrl && process.env.CLOUDINARY_CLOUD_NAME) {
+      // Intento de borrar de Cloudinary extrayendo el public_id
+      try {
+        const urlParts = book.coverUrl.split('/');
+        const filename = urlParts[urlParts.length - 1];
+        const publicId = 'audiolib_covers/' + filename.split('.')[0];
+        await cloudinary.uploader.destroy(publicId);
+      } catch (e) {
+        console.error('No se pudo borrar la imagen de Cloudinary:', e.message);
       }
     }
 
@@ -206,14 +237,38 @@ exports.updateBook = async (req, res) => {
 
     // Actualizar portada si se envió una nueva
     if (req.files && req.files.coverImage && req.files.coverImage[0]) {
-      // Eliminar portada anterior
-      if (book.coverUrl) {
+      const newCover = req.files.coverImage[0];
+      
+      // Eliminar portada anterior si era local
+      if (book.coverUrl && book.coverUrl.startsWith('/uploads/')) {
         const oldCoverPath = path.join(__dirname, '..', book.coverUrl);
         if (fs.existsSync(oldCoverPath)) {
           fs.unlinkSync(oldCoverPath);
         }
+      } else if (book.coverUrl && process.env.CLOUDINARY_CLOUD_NAME) {
+         try {
+           const urlParts = book.coverUrl.split('/');
+           const filename = urlParts[urlParts.length - 1];
+           const publicId = 'audiolib_covers/' + filename.split('.')[0];
+           await cloudinary.uploader.destroy(publicId);
+         } catch (e) { }
       }
-      book.coverUrl = `/uploads/${req.files.coverImage[0].filename}`;
+
+      // Subir nueva portada
+      if (process.env.CLOUDINARY_CLOUD_NAME) {
+        try {
+          const result = await cloudinary.uploader.upload(newCover.path, {
+            folder: 'audiolib_covers'
+          });
+          book.coverUrl = result.secure_url;
+          fs.unlinkSync(newCover.path);
+        } catch (cloudErr) {
+          console.error('Error subiendo portada a Cloudinary en edición:', cloudErr);
+          book.coverUrl = `/uploads/${newCover.filename}`;
+        }
+      } else {
+        book.coverUrl = `/uploads/${newCover.filename}`;
+      }
     }
 
     await book.save();

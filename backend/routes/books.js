@@ -5,13 +5,12 @@ const router = express.Router();
 
 const booksController = require('../controllers/booksController');
 
-// Configuración de Multer para subida de archivos
+// Configuración de Multer para subida de archivos (Se guardan temporalmente en local)
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, path.join(__dirname, '..', 'uploads'));
   },
   filename: (req, file, cb) => {
-    // Generar nombre único: timestamp + nombre original limpio
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, ext)
