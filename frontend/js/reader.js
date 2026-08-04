@@ -153,13 +153,25 @@ async function loadBook() {
 
   } catch (error) {
     console.error('Error loading book:', error);
-    readerLoading.innerHTML = `
-      <div class="reader-status">
-        <span class="icon" style="color: var(--danger);">${ICONS.alertCircle}</span>
-        <div class="loading-text">Error cargando el libro</div>
-      </div>
-    `;
-    showToast(error.message, 'error');
+    
+    // Offline detection for uncached books
+    if (!navigator.onLine) {
+      readerLoading.innerHTML = `
+        <div class="reader-status">
+          <span class="icon" style="color: var(--danger);">${ICONS.alertCircle}</span>
+          <div class="loading-text">No hay conexión. Este libro necesita conexión a internet la primera vez que lo abrís para descargar el texto.</div>
+        </div>
+      `;
+      showToast('Estás sin conexión', 'error');
+    } else {
+      readerLoading.innerHTML = `
+        <div class="reader-status">
+          <span class="icon" style="color: var(--danger);">${ICONS.alertCircle}</span>
+          <div class="loading-text">Error cargando el libro</div>
+        </div>
+      `;
+      showToast(error.message, 'error');
+    }
   }
 }
 
@@ -528,6 +540,20 @@ function loadVoices() {
     selectedVoice = otherSpanishVoices[0];
   } else {
     selectedVoice = sortedVoices[0];
+  }
+
+  // Actualizar advertencia
+  const warningEl = document.getElementById('voice-warning');
+  if (warningEl) {
+    if (argentineVoices.length === 0 && otherSpanishVoices.length > 0) {
+      warningEl.textContent = 'Usando voz en español (tu dispositivo no tiene voces argentinas).';
+      warningEl.style.display = 'block';
+    } else if (argentineVoices.length === 0 && otherSpanishVoices.length === 0 && voices.length > 0) {
+      warningEl.textContent = 'Tu dispositivo no tiene voces en español instaladas.';
+      warningEl.style.display = 'block';
+    } else {
+      warningEl.style.display = 'none';
+    }
   }
 }
 

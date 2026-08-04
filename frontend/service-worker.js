@@ -68,7 +68,12 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           // Si falla la red (offline), intentamos sacar la info del caché
-          return caches.match(request);
+          return caches.match(request).then((cachedResponse) => {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            throw new Error('Offline y sin caché disponible');
+          });
         })
     );
     return;
